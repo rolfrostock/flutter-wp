@@ -1,0 +1,5 @@
+{
+    "require": {
+        "vendor/package": "1.0.0"
+    }
+}
