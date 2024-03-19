@@ -13,7 +13,7 @@ class EditPostScreen extends StatefulWidget {
   final Post post;
   final WeatherForecast? weatherForecast;
 
-  const EditPostScreen({Key? key, required this.post, this.weatherForecast}) : super(key: key);
+  const EditPostScreen({super.key, required this.post, this.weatherForecast});
 
   @override
   State<EditPostScreen> createState() => _EditPostScreenState();
@@ -109,7 +109,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
 
                     if (success) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Post atualizado com sucesso!')),
+                        const SnackBar(content: Text('Post atualizado com sucesso!')),
                       );
                       Navigator.pushReplacement(
                         context,
@@ -122,7 +122,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
                       );
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Falha ao atualizar o post.')),
+                        const SnackBar(content: Text('Falha ao atualizar o post.')),
                       );
                     }
                   }

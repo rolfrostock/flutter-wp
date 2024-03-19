@@ -9,7 +9,7 @@ Map<String, Post> generateRandomDatabase({
   required int amount,
 }) {
   Random rng = Random();
-  var uuid = Uuid();
+  var uuid = const Uuid();
 
   Map<String, Post> map = {};
 

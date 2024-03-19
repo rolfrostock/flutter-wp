@@ -15,10 +15,10 @@ class PostDetailsScreen extends StatefulWidget {
   final WeatherForecast? weatherForecast;
 
   const PostDetailsScreen({
-    Key? key,
+    super.key,
     required this.postId,
     this.weatherForecast,
-  }) : super(key: key);
+  });
 
   @override
   _PostDetailsScreenState createState() => _PostDetailsScreenState();

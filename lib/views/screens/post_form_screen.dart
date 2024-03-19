@@ -7,6 +7,7 @@ import '../../services/wordpress_service.dart';
 import 'dart:io';
 import 'package:mime/mime.dart';
 import 'package:video_player/video_player.dart';
+import '../../views/screens/home_screen.dart';
 
 class PostFormScreen extends StatefulWidget {
   const PostFormScreen({super.key});
@@ -348,10 +349,15 @@ class _PostFormScreenState extends State<PostFormScreen> {
 
                       if (success) {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post criado com sucesso!')));
-                        Navigator.of(context).pop(true);
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(builder: (context) => HomeScreen()), // Substitua HomeScreen() pelo widget da sua tela inicial
+                              (Route<dynamic> route) => false,
+                        );
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Falha ao criar post')));
                       }
+
                     } else if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Falha ao fazer upload da mídia')));
                     }
