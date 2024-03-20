@@ -184,9 +184,19 @@ class _PostFormScreenState extends State<PostFormScreen> {
                 }).toList(),
               ),
               const SizedBox(height: 10),
-              ListTile(
-                title: const Text("+/- Categorias"),
-                onTap: () => _showCategoryDialog(),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10), // Ajuste o padding conforme necessário
+                child: GestureDetector(
+                  onTap: () => _showCategoryDialog(),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center, // Centraliza o Row no eixo horizontal
+                    children: [
+                      Icon(Icons.add_circle_outline, color: Colors.blue), // Ícone
+                      SizedBox(width: 10), // Espaçamento horizontal entre o ícone e o texto
+                      Text("Categorias"), // Texto
+                    ],
+                  ),
+                ),
               ),
               TextFormField(
                 controller: _titleController,
@@ -199,26 +209,16 @@ class _PostFormScreenState extends State<PostFormScreen> {
                 },
               ),
               ZefyrToolbar.basic(controller: _contentController),
-              // Container que define a altura e contém o ZefyrEditor
               Container(
-                height: 400,
-                padding: const EdgeInsets.only(bottom: 16.0),
+                height: 300,
+                decoration: const BoxDecoration(
+                  border: Border(bottom: BorderSide(width: 1.0, color: Colors.grey)),
+                ),
+                padding: const EdgeInsets.only(bottom: 20.0),
                 child: ZefyrEditor(
                   controller: _contentController,
                   padding: const EdgeInsets.all(8),
                 ),
-              ),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: _excerptController,
-                decoration: const InputDecoration(labelText: 'Resumo'),
-                maxLines: 2,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor, insira o Resumo';
-                  }
-                  return null;
-                },
               ),
               const SizedBox(height: 20),
               Row(
@@ -265,7 +265,7 @@ class _PostFormScreenState extends State<PostFormScreen> {
                       shape: const CircleBorder(),
                       padding: const EdgeInsets.all(16),
                     ),
-                    child: const Icon(Icons.photo_library, color: Colors.black), // `child` movido para o final
+                    child: const Icon(Icons.photo_library, color: Colors.black),
                   ),
                   ElevatedButton(
                     onPressed: _captureImageWithCamera,
@@ -274,7 +274,7 @@ class _PostFormScreenState extends State<PostFormScreen> {
                       shape: const CircleBorder(),
                       padding: const EdgeInsets.all(16),
                     ),
-                    child: const Icon(Icons.camera_alt, color: Colors.black), // `child` movido para o final
+                    child: const Icon(Icons.camera_alt, color: Colors.black),
                   ),
 
                   ElevatedButton(
@@ -299,9 +299,8 @@ class _PostFormScreenState extends State<PostFormScreen> {
 
                 ],
               ),
-              const SizedBox(height: 20),
-              const SizedBox(height: 20),
-              Center( // Usado para centralizar o botão no layout
+              const SizedBox(height: 30),
+              Center(
                 child: ElevatedButton(
                   onPressed: () async {
                     if (!_formKey.currentState!.validate() || _image == null) return;
@@ -312,7 +311,7 @@ class _PostFormScreenState extends State<PostFormScreen> {
                       barrierDismissible: false,
                       builder: (BuildContext context) => const Dialog(
                         child: Padding(
-                          padding: EdgeInsets.all(16.0),
+                          padding: EdgeInsets.all(4.0),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -329,7 +328,6 @@ class _PostFormScreenState extends State<PostFormScreen> {
                     final isVideo = mimeType?.startsWith('video/') ?? false;
                     final mediaResponse = await _wordPressService.uploadMedia(_image!.path, isVideo: isVideo);
 
-                    // Fecha o diálogo de progresso imediatamente após a operação de upload
                     Navigator.pop(context);
 
                     if (mediaResponse != null && mounted) {
@@ -351,7 +349,7 @@ class _PostFormScreenState extends State<PostFormScreen> {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post criado com sucesso!')));
                         Navigator.pushAndRemoveUntil(
                           context,
-                          MaterialPageRoute(builder: (context) => HomeScreen()), // Substitua HomeScreen() pelo widget da sua tela inicial
+                          MaterialPageRoute(builder: (context) => const HomeScreen()),
                               (Route<dynamic> route) => false,
                         );
                       } else {
@@ -362,6 +360,7 @@ class _PostFormScreenState extends State<PostFormScreen> {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Falha ao fazer upload da mídia')));
                     }
                   },
+
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.black,
                     foregroundColor: Colors.white,

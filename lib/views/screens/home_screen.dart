@@ -199,6 +199,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return match?.group(1) ?? '';
   }
 
+  String stripHtmlIfNeeded(String htmlString) {
+    RegExp exp = RegExp(r"<[^>]*>", multiLine: true, caseSensitive: false);
+    return htmlString.replaceAll(exp, '');
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -252,7 +256,10 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         tooltip: 'Criar novo post',
         child: const Icon(Icons.add),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.miniEndFloat,
     );
   }
 
@@ -270,7 +277,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget buildPostCard(Post post) {
     // Extrai a URL do vídeo do conteúdo do post
     final videoUrl = extractVideoUrlFromContent(post.content);
-    final contentPreview = _limitWords(post.content, 30);
+    final contentPreview = _limitWords(post.content, 50);
 
     return SingleChildScrollView(
       child: Card(
@@ -284,21 +291,21 @@ class _HomeScreenState extends State<HomeScreen> {
                 width: double.infinity,
                 fit: BoxFit.cover,
               ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Text(
-                post.title,
-                style: const TextStyle(
-                    fontSize: 20.0, fontWeight: FontWeight.bold),
+            if (videoUrl.isNotEmpty)
+              FutureBuilder<FileInfo>(
+                future: getCachedFile(videoUrl),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.done &&
+                      snapshot.hasData) {
+                    return AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: VideoPlayerWidget(videoFile: snapshot.data!.file),
+                    );
+                  } else {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                },
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: Text(
-                DateFormat('dd MMMM, yyyy').format(post.createdAt),
-                style: const TextStyle(color: Colors.grey, fontSize: 14),
-              ),
-            ),
             FutureBuilder<List<String>>(
               future: wordpressService.fetchCategoryNames(post.categories),
               builder: (context, snapshot) {
@@ -316,68 +323,73 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
               },
             ),
-            if (videoUrl.isNotEmpty)
-              FutureBuilder<FileInfo>(
-                future: getCachedFile(videoUrl),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.done &&
-                      snapshot.hasData) {
-                    return AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: VideoPlayerWidget(videoFile: snapshot.data!.file),
-                    );
-                  } else {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                },
-              ),
             Padding(
               padding: const EdgeInsets.all(8.0),
-              child: Html(data: post.excerpt),
-            ),
-            // Aqui você adiciona o texto resumido
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Text(contentPreview),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(
-                bottom: 20.0,
-                top: 20.0,
+              child: Text(
+                post.title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 20.0, fontWeight: FontWeight.bold),
               ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20.0), // Adiciona padding vertical para mais espaço
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween, // Isso espaça os ícones uniformemente
                 children: <Widget>[
-                  IconButton(
-                    icon: const Icon(Icons.share),
-                    onPressed: () {
-                      // Implemente a lógica de compartilhamento aqui
-                    },
+                  // Ícone de compartilhamento alinhado à esquerda
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      icon: const Icon(Icons.share),
+                      onPressed: () {
+                        // Implemente a lógica de compartilhamento aqui
+                      },
+                    ),
                   ),
+                  // Ícone de delete centralizado
+                  // Como queremos apenas um item centralizado entre dois outros, não precisamos de uma ação adicional aqui
                   IconButton(
                     icon: const Icon(Icons.delete),
                     onPressed: () => _confirmDeletePost(context, post.id),
                   ),
-                  TextButton(
-                    child: const Text("Ler mais...",
-                        style: TextStyle(color: Colors.blue)),
-                    onPressed: () {
-                      if (weatherForecast != null) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => PostDetailsScreen(
-                              postId: post.id,
-                              weatherForecast: weatherForecast!,
+                  // Ícone de leitura (read_more) alinhado à direita
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: IconButton(
+                      icon: Icon(Icons.read_more, color: Colors.black, size: _iconSize),
+                      onPressed: () {
+                        if (weatherForecast != null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => PostDetailsScreen(
+                                postId: post.id,
+                                weatherForecast: weatherForecast!,
+                              ),
                             ),
-                          ),
-                        );
-                      } else {
-                        // Opcional: Mostrar uma mensagem de erro ou feedback ao usuário
-                      }
-                    },
+                          );
+                        } else {
+                          // Opcional: Mostrar uma mensagem de erro ou feedback ao usuário
+                        }
+                      },
+                    ),
                   ),
                 ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                limitWords(stripHtmlIfNeeded(post.content), 60), // Limita as palavras e remove HTML se necessário
+                style: TextStyle(fontSize: 16), // Você pode ajustar o estilo conforme necessário
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0, top:8.0),
+              child: Text(
+                DateFormat('dd MMMM, yyyy').format(post.createdAt),
+                style: const TextStyle(color: Colors.grey, fontSize: 14),
               ),
             ),
           ],
@@ -386,6 +398,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+
+double _iconSize = 32.0;
 
 String _limitWords(String text, int wordLimit) {
   var words = text.split(RegExp('\\s+'));

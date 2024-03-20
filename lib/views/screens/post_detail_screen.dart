@@ -66,9 +66,9 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
     // Substitua VideoPlayerController.network por VideoPlayerController.networkUrl
     _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
       ..initialize().then((_) {
-        if (!mounted) return; // Verifica se o widget ainda está montado
+        if (!mounted) return;
         setState(() {
-          _isLoading = false; // Marca como falso quando o vídeo termina de carregar
+          _isLoading = false;
           _chewieController = ChewieController(
             videoPlayerController: _videoPlayerController!,
             aspectRatio: _videoPlayerController!.value.aspectRatio,
@@ -77,10 +77,10 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
           );
         });
       }).catchError((error) {
-        if (!mounted) return; // Verifica se o widget ainda está montado
+        if (!mounted) return;
         print('Error initializing video player: $error');
         setState(() {
-          _isLoading = false; // Marca como falso em caso de erro
+          _isLoading = false;
         });
       });
   }
@@ -89,7 +89,7 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
   String extractVideoUrlFromContent(String content) {
     final regex = RegExp(r'src="([^"]+)"');
     final match = regex.firstMatch(content);
-    return match?.group(1) ?? ''; // Retorna a URL do vídeo ou uma string vazia
+    return match?.group(1) ?? '';
   }
 
   @override
@@ -106,7 +106,6 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
                 children: [
                   const Icon(Icons.wb_sunny),
                   const SizedBox(width: 8),
-                  // Use the null-aware operator ?. to access temperature safely
                   Text('${widget.weatherForecast?.temperature.toStringAsFixed(1)}°C'),
                 ],
               ),
@@ -123,7 +122,6 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
                   MaterialPageRoute(
                     builder: (context) => EditPostScreen(
                       post: post!,
-                      // Since weatherForecast is optional, it's fine to pass it as is
                       weatherForecast: widget.weatherForecast,
                     ),
                   ),
@@ -144,7 +142,6 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
   Widget buildPostDetails() {
     List<Widget> contentWidgets = [];
 
-    // Se o vídeo estiver inicializado, adicione primeiro
     if (_videoPlayerController != null && _videoPlayerController!.value.isInitialized) {
       contentWidgets.add(
         AspectRatio(
@@ -154,12 +151,10 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
       );
     }
 
-    // Adiciona a imagem do post, se houver
     if (post!.imageUrl != null) {
       contentWidgets.add(Image.network(post!.imageUrl!));
     }
 
-    // Adiciona os demais elementos (data, conteúdo em HTML)
     contentWidgets.add(
       Padding(
         padding: const EdgeInsets.all(8.0),

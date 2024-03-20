@@ -81,21 +81,25 @@ class _EditPostScreenState extends State<EditPostScreen> {
                 decoration: const InputDecoration(labelText: 'Título'),
                 validator: (value) => value == null || value.isEmpty ? 'Por favor, insira um título' : null,
               ),
-              TextFormField(
-                controller: _excerptController,
-                decoration: const InputDecoration(labelText: 'Excerto'),
-                maxLines: 2,
-                validator: (value) => value == null || value.isEmpty ? 'Por favor, insira um excerto' : null,
-              ),
+              //TextFormField(
+              //  controller: _excerptController,
+              //  decoration: const InputDecoration(labelText: 'Excerto'),
+              //  maxLines: 2,
+              //  validator: (value) => value == null || value.isEmpty ? 'Por favor, insira um excerto' : null,
+              //),
               ZefyrToolbar.basic(controller: _contentController),
               Container(
-                height: 400,
-                padding: const EdgeInsets.only(bottom: 16.0),
+                height: 500,
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(width: 1.0, color: Colors.grey)),
+                ),
+                padding: const EdgeInsets.only(bottom: 20.0),
                 child: ZefyrEditor(
                   controller: _contentController,
                   padding: const EdgeInsets.all(8),
                 ),
               ),
+              const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: () async {
                   if (_formKey.currentState!.validate()) {
@@ -127,6 +131,10 @@ class _EditPostScreenState extends State<EditPostScreen> {
                     }
                   }
                 },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
+                ),
                 child: const Text('Salvar Alterações'),
               ),
             ],
