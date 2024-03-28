@@ -9,16 +9,19 @@ import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import '../../services/wordpress_service.dart';
 import '../../views/screens/edit_post_screen.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
 
 class PostDetailsScreen extends StatefulWidget {
   final int postId;
   final WeatherForecast? weatherForecast;
 
   const PostDetailsScreen({
-    super.key,
+    Key? key,
     required this.postId,
     this.weatherForecast,
-  });
+  }) : super(key: key);
 
   @override
   _PostDetailsScreenState createState() => _PostDetailsScreenState();
@@ -30,40 +33,70 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
   WordPressService wordpressService = WordPressService();
   Post? post;
   bool _isLoading = true;
+  List<String> _categoryNames = [];
 
   @override
   void initState() {
     super.initState();
     fetchPostDetails();
+    fetchEventDetails();
   }
 
+
+  Evento? evento;
+  Future<void> fetchEventDetails() async {
+    try {
+      final headers = {
+        'Authorization': wordpressService.getBasicAuthHeader(),
+      };
+      final url = Uri.parse('https://ia.digital.curitiba.br/wp-json/eventos-app/v1/evento/${widget.postId}');
+
+      final response = await http.get(url, headers: headers);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final eventoFetched = Evento.fromJson(data);
+        setState(() {
+          evento = eventoFetched;
+        });
+      } else {
+        print('Falha ao buscar detalhes do evento: ${response.body}');
+      }
+    } catch (e) {
+      print('Erro ao buscar detalhes do evento: $e');
+    }
+  }
+
+
+
+  List<int> _categoryIds = [];
   Future<void> fetchPostDetails() async {
     try {
       final fetchedPost = await wordpressService.fetchPostById(widget.postId);
       if (fetchedPost != null) {
+        // Fetch category names using the category IDs in the fetched post
+        List<String> categoryNames = await wordpressService.fetchCategoryNames(fetchedPost.categories);
+        _categoryIds = fetchedPost.categories;
         setState(() {
           post = fetchedPost;
+          _categoryNames = categoryNames;
         });
         final videoUrl = extractVideoUrlFromContent(post!.content);
         if (videoUrl.isNotEmpty) {
           initializeVideoPlayer(videoUrl);
         } else {
-          // Se não houver vídeo, marca como não carregando
           setState(() {
             _isLoading = false;
           });
         }
       }
     } catch (e) {
-      print('Error fetching post details: $e');
+      //print('Error fetching post details: $e');
     }
   }
 
   Future<void> initializeVideoPlayer(String videoUrl) async {
     _videoPlayerController?.dispose();
     _chewieController?.dispose();
-
-    // Substitua VideoPlayerController.network por VideoPlayerController.networkUrl
     _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(videoUrl))
       ..initialize().then((_) {
         if (!mounted) return;
@@ -78,7 +111,7 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
         });
       }).catchError((error) {
         if (!mounted) return;
-        print('Error initializing video player: $error');
+        //print('Error initializing video player: $error');
         setState(() {
           _isLoading = false;
         });
@@ -98,37 +131,49 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
       appBar: AppBar(
         title: Text(post?.title ?? 'Loading...'),
         actions: <Widget>[
-          // Only display the weather info if weatherForecast is not null
           if (widget.weatherForecast != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  const Icon(Icons.wb_sunny),
-                  const SizedBox(width: 8),
-                  Text('${widget.weatherForecast?.temperature.toStringAsFixed(1)}°C'),
-                ],
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Mostra a temperatura com uma casa decimal
+                Text('${widget.weatherForecast?.temperature.toStringAsFixed(1)}°C'),
+                // Adicionando espaço entre o texto da temperatura e o ícone
+                const SizedBox(width: 8),
+                // Ícone do clima baseado no código do ícone de weatherForecast
+                if (widget.weatherForecast!.iconCode != null)
+                  Image.network(
+                    'https://openweathermap.org/img/wn/${widget.weatherForecast!.iconCode}@2x.png',
+                    width: 40,
+                  ),
+                // Espaçamento no final
+                const SizedBox(width: 16),
+              ],
             ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: fetchPostDetails,
+            onPressed: () async {
+              await fetchPostDetails();
+              await fetchEventDetails();
+            },
           ),
           IconButton(
             icon: const Icon(Icons.edit),
-            onPressed: () {
+            onPressed: () async {
               if (post != null) {
-                Navigator.of(context).push(
+                final result = await Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => EditPostScreen(
                       post: post!,
                       weatherForecast: widget.weatherForecast,
+                      categoryIds: _categoryIds.map((id) => id.toString()).toList(),
                     ),
                   ),
-                ).then((value) {
-                  // Refresh post details after potentially editing the post
-                  fetchPostDetails();
-                });
+                );
+
+                if (result == true) {
+                  await fetchPostDetails();
+                  await fetchEventDetails();
+                }
               }
             },
           ),
@@ -154,7 +199,14 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
     if (post!.imageUrl != null) {
       contentWidgets.add(Image.network(post!.imageUrl!));
     }
-
+    if (_categoryNames.isNotEmpty) {
+      contentWidgets.add(
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Text("${_categoryNames.join(", ")}"),
+        ),
+      );
+    }
     contentWidgets.add(
       Padding(
         padding: const EdgeInsets.all(8.0),
@@ -172,6 +224,73 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
       ),
     );
 
+    if (evento != null) {
+      contentWidgets.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10.0, 10.0, 10.0, 20.0), // Alterado aqui
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Data e hora de Início
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Icon(Icons.date_range),
+                  Expanded(child: Text(' ${DateFormat('dd/MM/yyyy HH:mm').format(evento!.startDate)}')),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // Data e hora de Fim
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Icon(Icons.date_range),
+                  Expanded(child: Text(' ${DateFormat('dd/MM/yyyy HH:mm').format(evento!.endDate)}')),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // Localização
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Icon(Icons.location_on),
+                  Expanded(child: Text(' ${evento!.location}')),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // Endereço
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Icon(Icons.map),
+                  Expanded(child: Text(' ${evento!.address}')),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // Organizador
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Icon(Icons.person),
+                  Expanded(child: Text(' ${evento!.organizer}')),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+
+    if (post?.evento != null) {
+      contentWidgets.addAll([
+        Text("Data de Início: ${DateFormat('dd/MM/yyyy').format(post!.evento!.startDate)}"),
+        Text("Data de Fim: ${DateFormat('dd/MM/yyyy').format(post!.evento!.endDate)}"),
+        Text("Localização: ${post!.evento!.location}"),
+        Text("Endereço: ${post!.evento!.address}"),
+        Text("Organizador: ${post!.evento!.organizer}"),
+      ]);
+    }
     return SingleChildScrollView(
       child: Column(children: contentWidgets),
     );

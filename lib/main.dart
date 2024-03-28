@@ -2,24 +2,29 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import '../views/screens/home_screen.dart';
+import 'package:provider/provider.dart';
+import 'views/screens/home_screen.dart';
+import 'providers/theme_provider.dart';
 
-Future main() async {
-  await dotenv.load(); // Inicialize dotenv
-
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load();
+  runApp(
+    ChangeNotifierProvider(
+      create: (context) => ThemeProvider(),
+      child: MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
     return MaterialApp(
       title: 'Wordpress APP',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
+      theme: themeProvider.currentTheme, // Usa o tema claro ou escuro baseado na seleção do usuário
       home: const HomeScreen(),
     );
   }

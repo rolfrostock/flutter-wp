@@ -52,6 +52,7 @@ android {
 
         // Habilita Multidex para o projeto
         multiDexEnabled true
+        minSdkVersion 23
     }
 
     buildTypes {
@@ -67,4 +68,6 @@ flutter {
     source '../..'
 }
 
-dependencies {}
+dependencies {
+    implementation 'androidx.multidex:multidex:2.0.1'
+}

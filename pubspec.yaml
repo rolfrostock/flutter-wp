@@ -1,4 +1,4 @@
-name: wordpress_app
+name: debernardo
 description: Sincronização de postagens
 publish_to: 'none' # Evita publicação acidental em pub.dev
 version: 1.0.0+1
@@ -31,6 +31,11 @@ dependencies:
   zefyrka: ^1.6.0
   html: ^0.15.4
   notus: ^1.0.0-rc.2
+  flutter_datetime_picker: ^1.5.1
+  flutter_quill: ^9.3.3
+  shared_preferences: ^2.2.2
+  provider: ^6.0.1
+  flutter_secure_storage: ^9.0.0
 
 dev_dependencies:
   flutter_test:
@@ -41,3 +46,4 @@ flutter:
   uses-material-design: true
   assets:
     - .env
+    - assets/mipmap.svg

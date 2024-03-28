@@ -1,4 +1,4 @@
-// lib/views/screens/post_form_screen.dart
+// pos_form_screen.dart
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -7,26 +7,32 @@ import '../../services/wordpress_service.dart';
 import 'dart:io';
 import 'package:mime/mime.dart';
 import 'package:video_player/video_player.dart';
-import '../../views/screens/home_screen.dart';
+import '../../views/screens/post_detail_screen.dart';
+import 'package:intl/intl.dart';
+
 
 class PostFormScreen extends StatefulWidget {
-  const PostFormScreen({super.key});
+  const PostFormScreen({Key? key}) : super(key: key);
 
   @override
   _PostFormScreenState createState() => _PostFormScreenState();
 }
 
-
 class _PostFormScreenState extends State<PostFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _titleController = TextEditingController();
-  late ZefyrController _contentController;
   final TextEditingController _excerptController = TextEditingController();
+  final TextEditingController _locationController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _organizerController = TextEditingController();
+  late ZefyrController _contentController;
   String? _postStatus = 'publish';
   XFile? _image;
   final ImagePicker _picker = ImagePicker();
   VideoPlayerController? _videoController;
   final WordPressService _wordPressService = WordPressService();
+  DateTime? _startDate;
+  DateTime? _endDate;
   List<dynamic> _categories = [];
   List<String> _selectedCategoryIds = [];
 
@@ -66,16 +72,13 @@ class _PostFormScreenState extends State<PostFormScreen> {
     if (_videoController != null) {
       _videoController!.dispose();
       _videoController = null;
+      _titleController.dispose();
+      _contentController.dispose();
+      _excerptController.dispose();
+      _locationController.dispose();
+      _addressController.dispose();
+      _organizerController.dispose();
     }
-  }
-
-  void _initializeVideoController(String path) {
-    _videoController?.dispose();
-
-    _videoController = VideoPlayerController.file(File(path))
-      ..initialize().then((_) {
-        setState(() {});
-      });
   }
 
   @override
@@ -91,6 +94,12 @@ class _PostFormScreenState extends State<PostFormScreen> {
 
   @override
   void dispose() {
+    _titleController.dispose();
+    _contentController.dispose();
+    _excerptController.dispose();
+    _locationController.dispose();
+    _addressController.dispose();
+    _organizerController.dispose();
     _videoController?.dispose();
     super.dispose();
   }
@@ -105,8 +114,8 @@ class _PostFormScreenState extends State<PostFormScreen> {
     showDialog(
       context: context,
       builder: (context) {
-        return StatefulBuilder( // Adiciona um StatefulBuilder aqui
-          builder: (context, setStateDialog) { // Agora usa setStateDialog para atualizar o estado do diálogo
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
             return AlertDialog(
               title: const Text("Select Categories"),
               content: SingleChildScrollView(
@@ -116,10 +125,10 @@ class _PostFormScreenState extends State<PostFormScreen> {
                       value: categoryMap[category['id'].toString()],
                       title: Text(category['name']),
                       onChanged: (bool? selected) {
-                        setStateDialog(() { // Use setStateDialog para atualizar a UI do diálogo
+                        setStateDialog(() {
                           categoryMap[category['id'].toString()] = selected!;
                         });
-                        setState(() { // Use setState para atualizar a UI da página
+                        setState(() {
                           if (selected == true) {
                             _selectedCategoryIds.add(category['id'].toString());
                           } else {
@@ -146,7 +155,117 @@ class _PostFormScreenState extends State<PostFormScreen> {
     );
   }
 
+  Future<void> _selectDate(BuildContext context, {required bool isStartDate}) async {
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: isStartDate ? _startDate ?? DateTime.now() : _endDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2025),
+    );
+    if (pickedDate != null) {
+      final TimeOfDay? pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(isStartDate ? _startDate ?? DateTime.now() : _endDate ?? DateTime.now()),
+      );
+      if (pickedTime != null) {
+        final DateTime finalDateTime = DateTime(
+          pickedDate.year,
+          pickedDate.month,
+          pickedDate.day,
+          pickedTime.hour,
+          pickedTime.minute,
+        );
+        setState(() {
+          if (isStartDate) {
+            _startDate = finalDateTime;
+          } else {
+            _endDate = finalDateTime;
+          }
+        });
+      }
+    }
+  }
 
+  void _initializeVideoController(String path) {
+    _videoController?.dispose();
+    _videoController = VideoPlayerController.file(File(path))
+      ..initialize().then((_) {
+        setState(() {});
+      });
+  }
+
+  Future<void> _submitPost() async {
+    if (!_formKey.currentState!.validate() || _image == null) return;
+
+    final String contentPlainText = _contentController.document.toPlainText();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) => const Dialog(
+        child: Padding(
+          padding: EdgeInsets.all(20.0),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Text("Enviando..."),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final mimeType = lookupMimeType(_image!.path);
+    final isVideo = mimeType?.startsWith('video/') ?? false;
+    final mediaResponse = await _wordPressService.uploadMedia(_image!.path, isVideo: isVideo);
+
+    Navigator.pop(context);
+
+    if (mediaResponse != null && mounted) {
+      final int mediaId = mediaResponse['mediaId'];
+      final String? mediaUrl = mediaResponse['mediaUrl'];
+      final List<int> selectedCategoryIds = _selectedCategoryIds.map(int.parse).toList();
+
+      final bool success = await _wordPressService.createPost(
+        _titleController.text,
+        contentPlainText,
+        _excerptController.text,
+        mediaId,
+        _postStatus!,
+        videoUrl: isVideo ? mediaUrl : null,
+        startDate: _startDate!,
+        endDate: _endDate!,
+        location: _locationController.text,
+        address: _addressController.text,
+        organizer: _organizerController.text,
+        categoryIds: selectedCategoryIds,
+      );
+
+      if (success) {
+        _titleController.clear();
+        _excerptController.clear();
+        _locationController.clear();
+        _addressController.clear();
+        _organizerController.clear();
+        _contentController = ZefyrController(NotusDocument());
+        setState(() {
+          _image = null;
+          _startDate = null;
+          _endDate = null;
+
+        });
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => PostDetailsScreen(postId: mediaId)),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Falha ao criar post')));
+      }
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Falha ao fazer upload da mídia')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -163,10 +282,9 @@ class _PostFormScreenState extends State<PostFormScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              // Visualização das Categorias Selecionadas
               Wrap(
-                spacing: 8.0, // Espaço horizontal entre chips
-                runSpacing: 4.0, // Espaço vertical entre chips
+                spacing: 8.0,
+                runSpacing: 4.0,
                 children: _selectedCategoryIds.map((id) {
                   final categoryName = _categories.firstWhere(
                           (category) => category['id'].toString() == id,
@@ -185,15 +303,15 @@ class _PostFormScreenState extends State<PostFormScreen> {
               ),
               const SizedBox(height: 10),
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10), // Ajuste o padding conforme necessário
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 child: GestureDetector(
                   onTap: () => _showCategoryDialog(),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center, // Centraliza o Row no eixo horizontal
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.add_circle_outline, color: Colors.blue), // Ícone
-                      SizedBox(width: 10), // Espaçamento horizontal entre o ícone e o texto
-                      Text("Categorias"), // Texto
+                      Icon(Icons.add_circle_outline, color: Colors.blue),
+                      SizedBox(width: 10),
+                      Text("Categorias"),
                     ],
                   ),
                 ),
@@ -201,60 +319,87 @@ class _PostFormScreenState extends State<PostFormScreen> {
               TextFormField(
                 controller: _titleController,
                 decoration: const InputDecoration(labelText: 'Título'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor, insira o título';
-                  }
-                  return null;
-                },
+                validator: (value) => value == null || value.isEmpty ? 'Por favor, insira um título' : null,
               ),
               ZefyrToolbar.basic(controller: _contentController),
               Container(
                 height: 300,
-                decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(width: 1.0, color: Colors.grey)),
-                ),
-                padding: const EdgeInsets.only(bottom: 20.0),
-                child: ZefyrEditor(
-                  controller: _contentController,
-                  padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(border: Border.all(color: Colors.grey)),
+                child: ZefyrEditor(controller: _contentController),
+              ),
+              TextFormField(
+                controller: _locationController,
+                decoration: const InputDecoration(labelText: 'Localização'),
+                validator: (value) => value == null || value.isEmpty ? 'Por favor, insira uma localização' : null,
+              ),
+              TextFormField(
+                controller: _addressController,
+                decoration: const InputDecoration(labelText: 'Endereço'),
+                validator: (value) => value == null || value.isEmpty ? 'Por favor, insira um endereço' : null,
+              ),
+              TextFormField(
+                controller: _organizerController,
+                decoration: const InputDecoration(labelText: 'Organizador'),
+                validator: (value) => value == null || value.isEmpty ? 'Por favor, insira um organizador' : null,
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 20, bottom: 20),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: <Widget>[
+                        ElevatedButton(
+                          onPressed: () => _selectDate(context, isStartDate: true),
+                          style: ElevatedButton.styleFrom(
+                            shape: const CircleBorder(),
+                            padding: const EdgeInsets.all(10),
+                            backgroundColor: Colors.green,
+                          ),
+                          child: const Icon(Icons.calendar_today, color: Colors.white),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Início: ${_startDate != null ? DateFormat('dd/MM/yyyy').format(_startDate!) : 'Não selecionada'}',
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: <Widget>[
+                        ElevatedButton(
+                          onPressed: () => _selectDate(context, isStartDate: false),
+                          style: ElevatedButton.styleFrom(
+                            shape: const CircleBorder(),
+                            padding: const EdgeInsets.all(10),
+                            backgroundColor: Colors.red,
+                          ),
+                          child: const Icon(Icons.calendar_today_outlined, color: Colors.white),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Término: ${_endDate != null ? DateFormat('dd/MM/yyyy').format(_endDate!) : 'Não selecionada'}',
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      margin: const EdgeInsets.only(top: 20),
+                      height: 1,
+                      color: Colors.grey,
+                    ),
+                  ],
                 ),
               ),
+
+
               const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: <Widget>[
-                  const Text('Status do Post: '),
-                  DropdownButton<String>(
-                    value: _postStatus,
-                    onChanged: (String? newValue) {
-                      setState(() {
-                        _postStatus = newValue;
-                      });
-                    },
-                    items: <String>['publish', 'draft']
-                        .map<DropdownMenuItem<String>>((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(value),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              if (_image != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: isVideo
-                      ? _videoController != null && _videoController!.value.isInitialized
-                      ? AspectRatio(
-                    aspectRatio: _videoController!.value.aspectRatio,
-                    child: VideoPlayer(_videoController!),
-                  )
-                      : Container()
-                      : Image.file(File(_image!.path), height: 200),
-                ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
@@ -296,78 +441,33 @@ class _PostFormScreenState extends State<PostFormScreen> {
                     ),
                     child: const Icon(Icons.videocam, color: Colors.black),
                   ),
-
                 ],
               ),
-              const SizedBox(height: 30),
+              if (_image != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 20.0),
+                  child: isVideo
+                      ? _videoController != null && _videoController!.value.isInitialized
+                      ? AspectRatio(
+                    aspectRatio: _videoController!.value.aspectRatio,
+                    child: VideoPlayer(_videoController!),
+                  )
+                      : Container()
+                      : Image.file(File(_image!.path), height: 200),
+                ),
+              const SizedBox(height: 40),
               Center(
                 child: ElevatedButton(
-                  onPressed: () async {
-                    if (!_formKey.currentState!.validate() || _image == null) return;
-
-                    final String contentPlainText = _contentController.document.toPlainText();
-                    showDialog(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (BuildContext context) => const Dialog(
-                        child: Padding(
-                          padding: EdgeInsets.all(4.0),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              CircularProgressIndicator(),
-                              SizedBox(width: 20),
-                              Text("Enviando..."),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-
-                    final mimeType = lookupMimeType(_image!.path);
-                    final isVideo = mimeType?.startsWith('video/') ?? false;
-                    final mediaResponse = await _wordPressService.uploadMedia(_image!.path, isVideo: isVideo);
-
-                    Navigator.pop(context);
-
-                    if (mediaResponse != null && mounted) {
-                      final int mediaId = mediaResponse['mediaId'];
-                      final String? mediaUrl = mediaResponse['mediaUrl'];
-                      final List<int> selectedCategoryIds = _selectedCategoryIds.map(int.parse).toList();
-
-                      final bool success = await _wordPressService.createPost(
-                        _titleController.text,
-                        contentPlainText,
-                        _excerptController.text,
-                        mediaId,
-                        _postStatus!,
-                        videoUrl: isVideo ? mediaUrl : null,
-                        categoryIds: selectedCategoryIds,
-                      );
-
-                      if (success) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post criado com sucesso!')));
-                        Navigator.pushAndRemoveUntil(
-                          context,
-                          MaterialPageRoute(builder: (context) => const HomeScreen()),
-                              (Route<dynamic> route) => false,
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Falha ao criar post')));
-                      }
-
-                    } else if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Falha ao fazer upload da mídia')));
-                    }
-                  },
-
+                  onPressed: _submitPost,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
+                    backgroundColor: Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
                   ),
                   child: const Text('Enviar Post'),
                 ),
               ),
+              const SizedBox(height: 20),
             ],
           ),
         ),

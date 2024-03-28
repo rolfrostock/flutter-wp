@@ -6,7 +6,6 @@ import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../models/weather_forecast.dart';
 import '../../models/post_model.dart';
-import 'package:flutter_html/flutter_html.dart';
 import '../../views/screens/post_form_screen.dart';
 import '../../views/screens/post_detail_screen.dart';
 import 'package:video_player/video_player.dart';
@@ -15,6 +14,10 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'dart:io';
 import 'package:intl/intl.dart';
 import '../../services/wordpress_service.dart';
+import 'package:provider/provider.dart';
+import '../../providers/theme_provider.dart';
+import '../../views/screens/login_screen.dart';
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -41,11 +44,16 @@ class _HomeScreenState extends State<HomeScreen> {
   final WordPressService wordpressService = WordPressService();
   final PageController _pageController = PageController(viewportFraction: 1.0);
   List<Post> posts = [];
+  List<Post> filteredPosts = [];
   WeatherForecast? weatherForecast;
   bool isLoading = false;
   bool hasMore = true;
   int currentPage = 1;
   final int postsPerPage = 3;
+  TextEditingController _searchController = TextEditingController();
+  List<Post> _searchResults = [];
+  FocusNode _searchFocusNode = FocusNode();
+  final String _baseUrl = 'https://ia.digital.curitiba.br/wp-json/wp/v2';
   //final ScrollController _scrollController = ScrollController();
 
   @override
@@ -57,11 +65,19 @@ class _HomeScreenState extends State<HomeScreen> {
         fetchPosts();
       }
     });
+
+    _searchFocusNode.addListener(() {
+      if (_searchFocusNode.hasFocus) {
+        _searchController.clear();
+      }
+    });
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose(); // Não esqueça de dar dispose no FocusNode
     super.dispose();
   }
 
@@ -74,7 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> fetchWeatherData() async {
     final apiKey = dotenv.env['OPENWEATHERMAP_API_KEY'];
     if (apiKey == null) {
-      print('API Key for OpenWeatherMap is not defined in .env file.');
+      //print('API Key for OpenWeatherMap is not defined in .env file.');
       return;
     }
     final weatherUrl = Uri.parse(
@@ -88,11 +104,11 @@ class _HomeScreenState extends State<HomeScreen> {
           weatherForecast = forecast;
         });
       } else {
-        print(
-            'Failed to load weather data. Status code: ${response.statusCode}');
+        //print(
+        //    'Failed to load weather data. Status code: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching weather data: $e');
+      //print('Error fetching weather data: $e');
     }
   }
 
@@ -100,34 +116,56 @@ class _HomeScreenState extends State<HomeScreen> {
     if (isLoading || !hasMore) return;
     setState(() => isLoading = true);
 
-    final apiUrl =
-        'https://ia.digital.curitiba.br/wp-json/wp/v2/posts?_embed&page=$currentPage&per_page=$postsPerPage';
+    // Obtém o token JWT armazenado
+    final token = await wordpressService.getJwtToken();
+    if (token == null) {
+      print('Token JWT não encontrado.');
+      return;
+    }
+
+    final apiUrl = '$_baseUrl/posts?_embed&page=$currentPage&per_page=$postsPerPage';
+
     try {
-      final response = await http.get(Uri.parse(apiUrl));
-      final List<dynamic> fetchedPosts = jsonDecode(response.body);
-      if (fetchedPosts.isEmpty) {
-        hasMore = false;
+      // Faz a requisição GET à API do WordPress usando o cabeçalho de autorização Bearer
+      final response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'Bearer $token', // Usa o token JWT
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> fetchedPosts = jsonDecode(response.body);
+        if (fetchedPosts.isEmpty) {
+          hasMore = false;
+        } else {
+          setState(() {
+            posts.addAll(fetchedPosts.map((postData) => Post.fromJson(postData)).toList());
+            currentPage++;
+          });
+        }
       } else {
-        if (!mounted) return;
-        setState(() {
-          posts.addAll(
-              fetchedPosts.map((postData) => Post.fromJson(postData)).toList());
-          currentPage++;
-        });
+        print('Erro ao buscar posts: ${response.statusCode}. Mensagem: ${response.body}');
       }
     } catch (e) {
-      // Tratar erro adequadamente...
+      print('Exceção ao buscar posts: $e');
     } finally {
-      if (!mounted) return;
       setState(() => isLoading = false);
     }
   }
 
-//  void _loadMorePosts() {
-//    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent && !isLoading) {
-//      fetchPosts();
-//    }
-//  }
+  void filterPosts(String query) {
+    if (query.isEmpty) {
+      setState(() {
+        filteredPosts = posts;
+      });
+    } else {
+      setState(() {
+        filteredPosts = posts.where((post) =>
+            post.title.toLowerCase().contains(query.toLowerCase())).toList();
+      });
+    }
+  }
 
   void _confirmDeletePost(BuildContext context, int postId) {
     showDialog(
@@ -203,23 +241,116 @@ class _HomeScreenState extends State<HomeScreen> {
     RegExp exp = RegExp(r"<[^>]*>", multiLine: true, caseSensitive: false);
     return htmlString.replaceAll(exp, '');
   }
+
+  void _searchPosts(String query) async {
+
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults.clear();
+      });
+      return;
+    }
+    if (query.length < 3) {
+      setState(() {
+        _searchResults.clear();
+      });
+      return;
+    }
+
+    List<Post> tempResults = [];
+    for (var post in posts) {
+      bool containsInTitle = post.title.toLowerCase().contains(query.toLowerCase());
+
+      List<String> categoryNames = await wordpressService.fetchCategoryNames(post.categories);
+      bool containsInCategories = categoryNames.any((name) => name.toLowerCase().contains(query.toLowerCase()));
+
+      if (containsInTitle || containsInCategories) {
+        tempResults.add(post);
+      }
+    }
+
+    setState(() {
+      _searchResults = tempResults;
+    });
+  }
+
+  Widget _buildSearchResults() {
+    return ListView.builder(
+      itemCount: _searchResults.length,
+      itemBuilder: (context, index) {
+        final post = _searchResults[index];
+        return FutureBuilder<List<String>>(
+          future: wordpressService.fetchCategoryNames(post.categories),
+          builder: (context, snapshot) {
+            String categoryText = 'Carregando categorias...';
+            if (snapshot.connectionState == ConnectionState.done && snapshot.hasData) {
+              categoryText = 'Categorias: ${snapshot.data!.join(", ")}';
+            }
+            return ListTile(
+              title: Text(post.title),
+              subtitle: Text(categoryText, style: const TextStyle(color: Colors.grey)),
+              onTap: () {
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (context) => PostDetailsScreen(
+                    postId: post.id,
+                    weatherForecast: weatherForecast,
+                  ),
+                ));
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<bool> searchInCategories(List<int> categoryIds, String query) async {
+    List<String> categoryNames = await wordpressService.fetchCategoryNames(categoryIds);
+    for (var categoryName in categoryNames) {
+      if (categoryName.toLowerCase().contains(query.toLowerCase())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
+    print('Construindo HomeScreen com ${posts.length} posts.');
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ia.digital.curitiba.br'),
+        title: const Text('debernardo'),
         actions: [
-          if (weatherForecast != null)
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                children: [
-                  const Icon(Icons.wb_sunny),
-                  const SizedBox(width: 8),
-                  Text('${weatherForecast!.temperature.toStringAsFixed(2)}°C'),
-                ],
-              ),
+          if (weatherForecast != null) ...[
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('${weatherForecast!.temperature.toStringAsFixed(2)}°C'),
+                if (weatherForecast!.iconCode != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Image.network('https://openweathermap.org/img/wn/${weatherForecast!.iconCode}@2x.png', width: 40),
+                  ),
+                const SizedBox(width: 16), // For spacing
+              ],
             ),
+          ],
+          IconButton(
+            icon: Icon(Icons.login),
+            onPressed: () async {
+              // Navega para a tela de login
+              final username = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
+              );
+
+              // Opcional: Faça algo com o nome de usuário retornado, como exibir um SnackBar
+              if (username != null) {
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text('Bem-vindo, $username!')));
+              }
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () async {
@@ -227,20 +358,59 @@ class _HomeScreenState extends State<HomeScreen> {
               posts.clear();
               await fetchPosts();
               await fetchWeatherData();
+              _searchController.clear();
+              setState(() {
+                _searchResults.clear();
+                filteredPosts = List.from(posts);
+              });
+
+              _searchFocusNode.unfocus();
+            },
+          ),
+
+          IconButton(
+            icon: Icon(Icons.brightness_4),
+            onPressed: () {
+              final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+              themeProvider.toggleTheme(themeProvider.currentTheme.brightness == Brightness.dark ? false : true);
             },
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.only(bottom: 50),
-        child: PageView.builder(
-          controller: _pageController,
-          itemCount: posts.length,
-          itemBuilder: (context, index) {
-            final post = posts[index];
-            return buildPostCard(post);
-          },
-        ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: TextField(
+              focusNode: _searchFocusNode,
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: '#...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+              ),
+              onChanged: _searchPosts,
+            ),
+          ),
+          Expanded(
+            child: _searchResults.isNotEmpty
+                ? _buildSearchResults()
+                : Padding(
+              padding: const EdgeInsets.only(bottom: 50),
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: posts.length,
+                itemBuilder: (context, index) {
+                  final post = posts[index];
+                  return buildPostCard(post);
+                },
+              ),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
@@ -263,6 +433,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+
   Widget buildPostsList() {
     return PageView.builder(
       controller: PageController(viewportFraction: 1.0),
@@ -275,9 +446,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget buildPostCard(Post post) {
-    // Extrai a URL do vídeo do conteúdo do post
     final videoUrl = extractVideoUrlFromContent(post.content);
-    final contentPreview = _limitWords(post.content, 50);
 
     return SingleChildScrollView(
       child: Card(
@@ -333,65 +502,84 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20.0), // Adiciona padding vertical para mais espaço
+              padding: const EdgeInsets.symmetric(vertical: 20.0),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween, // Isso espaça os ícones uniformemente
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: <Widget>[
-                  // Ícone de compartilhamento alinhado à esquerda
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: IconButton(
-                      icon: const Icon(Icons.share),
-                      onPressed: () {
-                        // Implemente a lógica de compartilhamento aqui
-                      },
+                    child: Padding(
+                      padding: EdgeInsets.only(left: 10),
+                      child: IconButton(
+                        icon: const Icon(Icons.share),
+                        onPressed: () {
+                        },
+                      ),
                     ),
                   ),
-                  // Ícone de delete centralizado
-                  // Como queremos apenas um item centralizado entre dois outros, não precisamos de uma ação adicional aqui
                   IconButton(
                     icon: const Icon(Icons.delete),
                     onPressed: () => _confirmDeletePost(context, post.id),
                   ),
-                  // Ícone de leitura (read_more) alinhado à direita
                   Align(
                     alignment: Alignment.centerRight,
-                    child: IconButton(
-                      icon: Icon(Icons.read_more, color: Colors.black, size: _iconSize),
-                      onPressed: () {
-                        if (weatherForecast != null) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => PostDetailsScreen(
-                                postId: post.id,
-                                weatherForecast: weatherForecast!,
+                    child: Padding(
+                      padding: EdgeInsets.only(right: 10),
+                      child: IconButton(
+                        icon: Icon(Icons.read_more, size: _iconSize),
+                        onPressed: () {
+                          if (weatherForecast != null) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => PostDetailsScreen(
+                                  postId: post.id,
+                                  weatherForecast: weatherForecast!,
+                                ),
                               ),
-                            ),
-                          );
-                        } else {
-                          // Opcional: Mostrar uma mensagem de erro ou feedback ao usuário
-                        }
-                      },
+                            );
+                          } else {
+                            // Opcional: Mostrar uma mensagem de erro ou feedback ao usuário
+                          }
+                        },
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
+
             Padding(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.only(bottom: 50.0, top:40.0),
               child: Text(
-                limitWords(stripHtmlIfNeeded(post.content), 60), // Limita as palavras e remove HTML se necessário
-                style: TextStyle(fontSize: 16), // Você pode ajustar o estilo conforme necessário
+                limitWords(stripHtmlIfNeeded(post.content), 30),
+                style: const TextStyle(fontSize: 16),
               ),
             ),
+            if (post.evento != null)
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Evento: ${DateFormat('dd/MM/yyyy').format(post.evento!.startDate)} até ${DateFormat('dd/MM/yyyy').format(post.evento!.endDate)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text('Localização: ${post.evento!.location}'),
+                    Text('Endereço: ${post.evento!.address}'),
+                    Text('Organizador: ${post.evento!.organizer}'),
+                  ],
+                ),
+              ),
             Padding(
-              padding: const EdgeInsets.only(bottom: 8.0, top:8.0),
+              padding: const EdgeInsets.only(bottom: 50.0, top:8.0),
               child: Text(
                 DateFormat('dd MMMM, yyyy').format(post.createdAt),
                 style: const TextStyle(color: Colors.grey, fontSize: 14),
               ),
             ),
+
           ],
         ),
       ),
@@ -400,14 +588,6 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 double _iconSize = 32.0;
-
-String _limitWords(String text, int wordLimit) {
-  var words = text.split(RegExp('\\s+'));
-  if (words.length > wordLimit) {
-    return '${words.take(wordLimit).join(' ')}...';
-  }
-  return text;
-}
 
 class VideoPlayerWidget extends StatefulWidget {
   final File videoFile;
@@ -453,5 +633,61 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     _videoPlayerController.dispose();
     _chewieController?.dispose();
     super.dispose();
+  }
+}
+class PostDetailScreen extends StatefulWidget {
+  final int postId;
+
+  const PostDetailScreen({Key? key, required this.postId}) : super(key: key);
+
+  @override
+  _PostDetailScreenState createState() => _PostDetailScreenState();
+}
+
+class _PostDetailScreenState extends State<PostDetailScreen> {
+  late Future<Post?> postFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    postFuture = WordPressService().fetchPostById(widget.postId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Detalhes do Post'),
+      ),
+      body: FutureBuilder<Post?>(
+        future: postFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return Center(child: Text('Erro ao carregar detalhes do post: ${snapshot.error}'));
+          } else if (snapshot.hasData) {
+            final post = snapshot.data;
+            return SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (post?.imageUrl != null)
+                      Image.network(post!.imageUrl!),
+                    Text(post?.title ?? 'Título não disponível', style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: 10),
+                    Text(post?.content ?? 'Conteúdo não disponível'),
+                  ],
+                ),
+              ),
+            );
+          } else {
+            return const Center(child: Text('Dados do post não disponíveis.'));
+          }
+        },
+      ),
+    );
   }
 }
