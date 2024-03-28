@@ -138,15 +138,7 @@ class _EditPostScreenState extends State<EditPostScreen> {
   }
 
   Future<void> fetchEventDetails() async {
-    // Obtendo o token JWT
-    final String? token = await wordpressService.getJwtToken();
-    if (token == null) {
-      print("JWT Token not found. Cannot fetch event details.");
-      return;
-    }
-
-    // Agora passando o token JWT como argumento
-    final eventoFetched = await wordpressService.fetchEventByPostId(widget.post.id, token);
+    final eventoFetched = await wordpressService.fetchEventByPostId(widget.post.id);
     if (eventoFetched != null) {
       setState(() {
         _eventLocationController.text = eventoFetched.location;
@@ -159,7 +151,6 @@ class _EditPostScreenState extends State<EditPostScreen> {
       print("No event associated with this post.");
     }
   }
-
 
   Future<void> _selectDate(BuildContext context, {required bool isStartDate}) async {
     final DateTime? pickedDate = await showDatePicker(

@@ -24,7 +24,7 @@ class MyApp extends StatelessWidget {
 
     return MaterialApp(
       title: 'Wordpress APP',
-      theme: themeProvider.currentTheme, // Usa o tema claro ou escuro baseado na seleção do usuário
+      theme: themeProvider.currentTheme,
       home: const HomeScreen(),
     );
   }

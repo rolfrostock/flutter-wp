@@ -24,7 +24,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = false);
 
     if (token != null) {
-      // Retorna o nome de usuário para a tela anterior
+      await wordpressService.saveToken(token);
       Navigator.of(context).pop(_usernameController.text);
     } else {
       // Mostrar erro de login...

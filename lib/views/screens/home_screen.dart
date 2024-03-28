@@ -116,23 +116,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (isLoading || !hasMore) return;
     setState(() => isLoading = true);
 
-    // Obtém o token JWT armazenado
-    final token = await wordpressService.getJwtToken();
-    if (token == null) {
-      print('Token JWT não encontrado.');
-      return;
-    }
-
     final apiUrl = '$_baseUrl/posts?_embed&page=$currentPage&per_page=$postsPerPage';
 
     try {
-      // Faz a requisição GET à API do WordPress usando o cabeçalho de autorização Bearer
-      final response = await http.get(
-        Uri.parse(apiUrl),
-        headers: {
-          'Authorization': 'Bearer $token', // Usa o token JWT
-        },
-      );
+      final response = await http.get(Uri.parse(apiUrl));
 
       if (response.statusCode == 200) {
         final List<dynamic> fetchedPosts = jsonDecode(response.body);

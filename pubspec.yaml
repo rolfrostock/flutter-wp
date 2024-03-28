@@ -1,6 +1,6 @@
 name: debernardo
 description: Sincronização de postagens
-publish_to: 'none' # Evita publicação acidental em pub.dev
+publish_to: 'none'
 version: 1.0.0+1
 
 environment:
